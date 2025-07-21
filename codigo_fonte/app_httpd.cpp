@@ -251,6 +251,32 @@ static void draw_face_boxes(fb_data_t *fb, std::list<dl::detect::result_t> *resu
 }
 
 #if CONFIG_ESP_FACE_RECOGNITION_ENABLED
+#include <WiFi.h>
+#include <HTTPClient.h>
+
+// Função para enviar dados da face reconhecida ao servidor externo
+void send_face_to_server(int face_id, float similarity) {
+    if (WiFi.status() == WL_CONNECTED) {
+        HTTPClient http;
+        String serverUrl = "http://SEU_SERVIDOR/feat"; // Substitua pelo endpoint correto
+        http.begin(serverUrl);
+        http.addHeader("Content-Type", "application/json");
+
+        String payload = "{\"face_id\":" + String(face_id) + ",\"similarity\":" + String(similarity, 2) + "}";
+        int httpResponseCode = http.POST(payload);
+
+        if (httpResponseCode > 0) {
+            String response = http.getString();
+            log_i("Server response: %s", response.c_str());
+        } else {
+            log_e("Error sending to server: %d", httpResponseCode);
+        }
+        http.end();
+    } else {
+        log_e("WiFi not connected");
+    }
+}
+
 static int run_face_recognition(fb_data_t *fb, std::list<dl::detect::result_t> *results)
 {
     std::vector<int> landmarks = results->front().keypoint;
@@ -270,6 +296,8 @@ static int run_face_recognition(fb_data_t *fb, std::list<dl::detect::result_t> *
     face_info_t recognize = recognizer.recognize(tensor, landmarks);
     if(recognize.id >= 0){
         rgb_printf(fb, FACE_COLOR_GREEN, "ID[%u]: %.2f", recognize.id, recognize.similarity);
+        // Envia feat para o servidor após reconhecimento
+        send_face_to_server(recognize.id, recognize.similarity);
     } else {
         rgb_print(fb, FACE_COLOR_RED, "Intruder Alert!");
     }
